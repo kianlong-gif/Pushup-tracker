@@ -98,9 +98,10 @@
           <div id="timer-hud" class="hud-badge" style="color: var(--accent);">00:00</div>
         </div>
       </div>
-      <div style="margin-top: 10px; display: flex; gap: 8px;">
-        <button id="camera-btn" onclick="toggleCamera()" style="flex: 2;">Start AI Camera</button>
-        <button onclick="addManualRep()" class="btn-secondary" style="flex: 1;">+1 Manual</button>
+    <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
+         <button id="camera-btn" onclick="toggleCamera()" style="flex: 2;">Start AI Camera</button>
+         <button onclick="addManualRep()" class="btn-secondary" style="flex: 1;">+1 Manual</button>
+         <button onclick="finishWorkoutSet()" style="flex: 100%; background: #22c55e; color: #0f172a; margin-top: 4px;">Finish & Save Set</button>
       </div>
     </div>
 
@@ -429,16 +430,41 @@
   }
 }
 
-    async function saveSetToSupabase(reps, mode, isVerified) {
-      if (!supabaseClient || !user) return;
-      await supabaseClient.from('workout_sets').insert({
-        user_id: user.id,
-        username: user.user_metadata.preferred_username || 'Athlete',
-        reps: reps,
-        mode: mode,
-        is_verified: isVerified
-      });
-    }
+async function saveSetToSupabase(reps, mode, isVerified) {
+  if (!supabaseClient) {
+    alert("Supabase client is not connected.");
+    return;
+  }
+  if (!user) {
+    alert("Please click 'Login GitHub' at the top before saving your set!");
+    return;
+  }
+  if (reps <= 0) {
+    alert("Do at least 1 rep before saving!");
+    return;
+  }
+
+  // Fallback chain for username to prevent NULL database errors
+  const username = user.user_metadata.user_name || 
+                   user.user_metadata.preferred_username || 
+                   user.user_metadata.full_name || 
+                   'Athlete';
+
+  const { data, error } = await supabaseClient.from('workout_sets').insert({
+    user_id: user.id,
+    username: username,
+    reps: reps,
+    mode: mode,
+    is_verified: isVerified
+  });
+
+  if (error) {
+    console.error("Supabase Save Error:", error);
+    alert("Database Error: " + error.message);
+  } else {
+    alert(`Successfully saved ${reps} reps!`);
+  }
+}
 
     function toggleDrawer() {
       document.getElementById('drawer').classList.toggle('open');
