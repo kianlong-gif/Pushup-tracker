@@ -173,6 +173,9 @@
     let modeTimerSeconds = 0;
     let user = null;
 
+    let lastRepTime = 0;
+    let downPhaseStartTime = 0
+
     // --- INITIALIZATION ---
     window.addEventListener('DOMContentLoaded', async () => {
       if (supabaseClient) {
@@ -384,19 +387,31 @@
             canvasCtx.fillStyle = '#22c55e'; canvasCtx.fill();
           });
 
-          if (angle < 90 && repStage === 'UP') {
-            repStage = 'DOWN';
-            playDownBeep();
-            statusHud.innerText = 'Position: DOWN';
-            statusHud.style.color = '#f59e0b';
-          }
-          if (angle > 155 && repStage === 'DOWN') {
-            repStage = 'UP';
-            statusHud.innerText = 'Position: UP';
-            statusHud.style.color = '#22c55e';
-            recordRep(true);
-          }
-        }
+// NEW ANTI-CHEAT CODE:
+if (angle < 90 && repStage === 'UP') {
+  repStage = 'DOWN';
+  downPhaseStartTime = Date.now(); // Track when down position starts
+  playDownBeep();
+  statusHud.innerText = 'Position: DOWN';
+  statusHud.style.color = '#f59e0b';
+}
+
+if (angle > 155 && repStage === 'DOWN') {
+  const now = Date.now();
+  const timeInDownPhase = now - downPhaseStartTime;
+  const timeSinceLastRep = now - lastRepTime;
+
+  // Must hold bottom >= 120ms and full rep must take >= 750ms
+  if (timeInDownPhase >= 120 && timeSinceLastRep >= 750) {
+    repStage = 'UP';
+    lastRepTime = now;
+    statusHud.innerText = 'Position: UP';
+    statusHud.style.color = '#22c55e';
+    recordRep(true);
+  } else {
+    console.warn("Rep rejected: speed too fast or tracking glitch");
+  }
+}
       }
       canvasCtx.restore();
     });
