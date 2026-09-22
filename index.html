@@ -117,7 +117,6 @@
       <div class="tab-header">
         <button class="tab-btn active" onclick="switchTab('champions', event)">All-Time</button>
         <button class="tab-btn" onclick="switchTab('blitz_max', event)">60s Blitz</button>
-        <button class="tab-btn" onclick="switchTab('streaks', event)">Streaks</button>
       </div>
       <ul id="lb-list" class="lb-list">
         <li style="color: var(--text-muted); font-size: 0.85rem;">Loading rankings...</li>
@@ -137,20 +136,34 @@
   </div>
 
   <script>
-    // --- SUPABASE SETUP ---
+    // --- PASTE YOUR SUPABASE KEYS HERE ---
     const SUPABASE_URL = "https://vflqdmwdynpsxagmrpmw.supabase.co";
+    // NOTE: Make sure your key is fully pasted inside the quotes below
     const SUPABASE_ANON_KEY = "sb_publishable_cbQNTilH9HH...";
 
+    // --- GLOBAL VARIABLES ---
     let supabaseClient = null;
-    if (SUPABASE_URL !== "YOUR_SUPABASE_URL" && window.supabase) {
-      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    }
+    let audioCtx = null;
+    let currentMode = 'standard';
+    let currentReps = 0;
+    let repStage = 'UP';
+    let isCameraRunning = false;
+    let timerInterval = null;
+    let modeTimerSeconds = 0;
+    let user = null;
+    let lastRepTime = 0;
+    let downPhaseStartTime = 0;
+    let pose = null;
 
-    // --- AUDIO SYNTHESIZER ---
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // --- LAZY AUDIO INITIALIZATION (MOBILE SAFE) ---
     function playBeep(freq, type = 'sine', duration = 0.08) {
       try {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.type = type;
@@ -161,44 +174,39 @@
         gain.connect(audioCtx.destination);
         osc.start();
         osc.stop(audioCtx.currentTime + duration);
-      } catch (e) { console.warn("Audio Context blocked by browser"); }
+      } catch (e) {
+        console.warn("Audio Context error:", e);
+      }
     }
     const playDownBeep = () => playBeep(350, 'sine', 0.08);
     const playUpBeep = () => playBeep(750, 'triangle', 0.12);
 
-    // --- APP STATE & ANTI-CHEAT VARIABLES ---
-    let currentMode = 'standard';
-    let currentReps = 0;
-    let repStage = 'UP';
-    let isCameraRunning = false;
-    let timerInterval = null;
-    let modeTimerSeconds = 0;
-    let user = null;
-    let lastRepTime = 0;
-    let downPhaseStartTime = 0;
-
-    // --- INITIALIZATION ---
-    window.addEventListener('DOMContentLoaded', async () => {
-      if (supabaseClient) {
-        const { data: { session } } = await supabaseClient.auth.getSession();
-        if (session && session.user) {
-          user = session.user;
-          updateUserUI();
-        }
-
-        supabaseClient.auth.onAuthStateChange((_event, session) => {
+    // --- SAFE INITIALIZATION ---
+    window.onload = async () => {
+      try {
+        if (window.supabase && SUPABASE_URL.startsWith("http")) {
+          supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+          
+          const { data: { session } } = await supabaseClient.auth.getSession();
           if (session && session.user) {
             user = session.user;
             updateUserUI();
           }
-        });
 
-        loadLeaderboard('champions');
-        loadLiveFeed();
-      } else {
-        document.getElementById('lb-list').innerHTML = '<li style="color: var(--text-muted); font-size: 0.85rem;">Connecting database...</li>';
+          supabaseClient.auth.onAuthStateChange((_event, session) => {
+            if (session && session.user) {
+              user = session.user;
+              updateUserUI();
+            }
+          });
+
+          loadLeaderboard('champions');
+          loadLiveFeed();
+        }
+      } catch (err) {
+        console.error("Supabase init error:", err);
       }
-    });
+    };
 
     function updateUserUI() {
       if (!user) return;
@@ -209,8 +217,8 @@
       document.getElementById('auth-btn').innerText = 'Logout';
     }
 
-    // --- WORKOUT MODES ---
-    function setMode(mode, e) {
+    // --- WORKOUT LOGIC ---
+    window.setMode = function(mode, e) {
       currentMode = mode;
       document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
       if (e && e.target) e.target.classList.add('active');
@@ -222,7 +230,7 @@
         amrap: 'Mode: AMRAP (As Many Reps As Possible)'
       };
       document.getElementById('mode-desc').innerText = descMap[mode];
-    }
+    };
 
     function resetWorkout() {
       currentReps = 0;
@@ -266,11 +274,11 @@
       if (isVerified && navigator.vibrate) navigator.vibrate(80);
     }
 
-    function addManualRep() {
+    window.addManualRep = function() {
       recordRep(false);
-    }
+    };
 
-    async function finishWorkoutSet() {
+    window.finishWorkoutSet = async function() {
       if (currentReps <= 0) {
         alert("Do at least 1 rep before saving!");
         return;
@@ -283,9 +291,9 @@
       await saveSetToSupabase(currentReps, currentMode, true);
       loadLeaderboard('champions');
       resetWorkout();
-    }
+    };
 
-    // --- LEADERBOARDS & FEED ---
+    // --- LEADERBOARDS ---
     async function loadLeaderboard(type) {
       const lbEl = document.getElementById('lb-list');
       if (!supabaseClient) return;
@@ -338,7 +346,7 @@
             prependFeedItem(payload.new);
           })
           .subscribe();
-      } catch(e) { console.warn("Live feed subscription error", e); }
+      } catch(e) { console.warn("Live feed error", e); }
     }
 
     function renderFeedItems(items) {
@@ -362,98 +370,101 @@
       document.getElementById('feed-count').innerText = current + 1;
     }
 
-    // --- MEDIAPIPE AI CAMERA (MOBILE SAFE) ---
-    const videoElement = document.getElementById('webcam');
-    const canvasElement = document.getElementById('output_canvas');
-    const canvasCtx = canvasElement.getContext('2d');
-    const statusHud = document.getElementById('status-hud');
+    // --- MEDIAPIPE CAMERA ---
+    window.toggleCamera = function() {
+      const btn = document.getElementById('camera-btn');
+      const statusHud = document.getElementById('status-hud');
 
-    let pose = null;
-    if (window.Pose) {
-      pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-      pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5 });
+      if (!isCameraRunning) {
+        try {
+          if (!window.Pose) return alert("AI Pose library is still loading. Try again in a few seconds.");
 
-      pose.onResults((results) => {
-        canvasCtx.save();
-        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+          pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+          pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5 });
 
-        if (results.poseLandmarks) {
-          const lm = results.poseLandmarks;
-          const leftVis = (lm[11].visibility + lm[13].visibility + lm[15].visibility) / 3;
-          const rightVis = (lm[12].visibility + lm[14].visibility + lm[16].visibility) / 3;
-          const [shoulder, elbow, wrist] = leftVis > rightVis ? [lm[11], lm[13], lm[15]] : [lm[12], lm[14], lm[16]];
+          const videoElement = document.getElementById('webcam');
+          const canvasElement = document.getElementById('output_canvas');
+          const canvasCtx = canvasElement.getContext('2d');
 
-          if (shoulder.visibility > 0.5 && elbow.visibility > 0.5 && wrist.visibility > 0.5) {
-            const radians = Math.atan2(wrist.y - elbow.y, wrist.x - elbow.x) - Math.atan2(shoulder.y - elbow.y, shoulder.x - elbow.x);
-            let angle = Math.abs((radians * 180.0) / Math.PI);
-            angle = angle > 180.0 ? 360.0 - angle : Math.round(angle);
+          pose.onResults((results) => {
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-            [shoulder, elbow, wrist].forEach(pt => {
-              canvasCtx.beginPath();
-              canvasCtx.arc(pt.x * canvasElement.width, pt.y * canvasElement.height, 5, 0, 2 * Math.PI);
-              canvasCtx.fillStyle = '#22c55e'; canvasCtx.fill();
-            });
+            if (results.poseLandmarks) {
+              const lm = results.poseLandmarks;
+              const leftVis = (lm[11].visibility + lm[13].visibility + lm[15].visibility) / 3;
+              const rightVis = (lm[12].visibility + lm[14].visibility + lm[16].visibility) / 3;
+              const [shoulder, elbow, wrist] = leftVis > rightVis ? [lm[11], lm[13], lm[15]] : [lm[12], lm[14], lm[16]];
 
-            // Anti-Cheat Cadence Detection
-            if (angle < 90 && repStage === 'UP') {
-              repStage = 'DOWN';
-              downPhaseStartTime = Date.now();
-              playDownBeep();
-              statusHud.innerText = 'Position: DOWN';
-              statusHud.style.color = '#f59e0b';
-            }
+              if (shoulder.visibility > 0.5 && elbow.visibility > 0.5 && wrist.visibility > 0.5) {
+                const radians = Math.atan2(wrist.y - elbow.y, wrist.x - elbow.x) - Math.atan2(shoulder.y - elbow.y, shoulder.x - elbow.x);
+                let angle = Math.abs((radians * 180.0) / Math.PI);
+                angle = angle > 180.0 ? 360.0 - angle : Math.round(angle);
 
-            if (angle > 155 && repStage === 'DOWN') {
-              const now = Date.now();
-              const timeInDownPhase = now - downPhaseStartTime;
-              const timeSinceLastRep = now - lastRepTime;
+                [shoulder, elbow, wrist].forEach(pt => {
+                  canvasCtx.beginPath();
+                  canvasCtx.arc(pt.x * canvasElement.width, pt.y * canvasElement.height, 5, 0, 2 * Math.PI);
+                  canvasCtx.fillStyle = '#22c55e'; canvasCtx.fill();
+                });
 
-              if (timeInDownPhase >= 120 && timeSinceLastRep >= 750) {
-                repStage = 'UP';
-                lastRepTime = now;
-                statusHud.innerText = 'Position: UP';
-                statusHud.style.color = '#22c55e';
-                recordRep(true);
-              } else {
-                console.warn("Rep rejected: cadence too fast / flickering points");
+                if (angle < 90 && repStage === 'UP') {
+                  repStage = 'DOWN';
+                  downPhaseStartTime = Date.now();
+                  playDownBeep();
+                  statusHud.innerText = 'Position: DOWN';
+                  statusHud.style.color = '#f59e0b';
+                }
+
+                if (angle > 155 && repStage === 'DOWN') {
+                  const now = Date.now();
+                  const timeInDownPhase = now - downPhaseStartTime;
+                  const timeSinceLastRep = now - lastRepTime;
+
+                  if (timeInDownPhase >= 120 && timeSinceLastRep >= 750) {
+                    repStage = 'UP';
+                    lastRepTime = now;
+                    statusHud.innerText = 'Position: UP';
+                    statusHud.style.color = '#22c55e';
+                    recordRep(true);
+                  }
+                }
               }
             }
-          }
-        }
-        canvasCtx.restore();
-      });
-    }
+            canvasCtx.restore();
+          });
 
-    function toggleCamera() {
-      if (!pose) return alert("Camera AI script is still loading or blocked by your mobile browser settings.");
-      const btn = document.getElementById('camera-btn');
-      if (!isCameraRunning) {
-        const cam = new Camera(videoElement, { onFrame: async () => { await pose.send({ image: videoElement }); }, width: 640, height: 480 });
-        cam.start();
-        isCameraRunning = true;
-        btn.innerText = 'Stop Camera';
-        statusHud.innerText = 'Position: Ready';
+          const cam = new Camera(videoElement, {
+            onFrame: async () => { await pose.send({ image: videoElement }); },
+            width: 640,
+            height: 480
+          });
+          cam.start();
+
+          isCameraRunning = true;
+          btn.innerText = 'Stop Camera';
+          statusHud.innerText = 'Position: Ready';
+        } catch (err) {
+          alert("Could not start camera: " + err.message);
+        }
       } else {
         location.reload();
       }
-    }
+    };
 
-    // --- AUTH & DATABASE ACTIONS ---
-    async function toggleAuth() {
-      if (!supabaseClient) return alert("Supabase client not connected!");
+    // --- AUTH & HELPERS ---
+    window.toggleAuth = async function() {
+      if (!supabaseClient) return alert("Supabase is not connected!");
       if (user) {
         await supabaseClient.auth.signOut();
         location.reload();
       } else {
         await supabaseClient.auth.signInWithOAuth({
           provider: 'github',
-          options: {
-            redirectTo: window.location.origin + window.location.pathname
-          }
+          options: { redirectTo: window.location.origin + window.location.pathname }
         });
       }
-    }
+    };
 
     async function saveSetToSupabase(reps, mode, isVerified) {
       if (!supabaseClient || !user) return;
@@ -468,22 +479,21 @@
       });
 
       if (error) {
-        console.error("Save error:", error);
         alert("Database Error: " + error.message);
       } else {
         alert(`Successfully saved ${reps} reps!`);
       }
     }
 
-    function toggleDrawer() {
+    window.toggleDrawer = function() {
       document.getElementById('drawer').classList.toggle('open');
-    }
+    };
 
-    function switchTab(tab, e) {
+    window.switchTab = function(tab, e) {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       if (e && e.target) e.target.classList.add('active');
       loadLeaderboard(tab);
-    }
+    };
   </script>
 </body>
 </html>
