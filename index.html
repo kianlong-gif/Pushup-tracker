@@ -415,14 +415,19 @@
 
     // --- AUTH & DATABASE ACTIONS ---
     async function toggleAuth() {
-      if (!supabaseClient) return alert("Paste your Supabase URL and Key into index.html!");
-      if (user) {
-        await supabaseClient.auth.signOut();
-        location.reload();
-      } else {
-        await supabaseClient.auth.signInWithOAuth({ provider: 'github' });
+  if (!supabaseClient) return alert("Paste your Supabase URL and Key into index.html!");
+  if (user) {
+    await supabaseClient.auth.signOut();
+    location.reload();
+  } else {
+    await supabaseClient.auth.signInWithOAuth({
+      provider: 'github',
+      options: {
+        redirectTo: window.location.origin + window.location.pathname
       }
-    }
+    });
+  }
+}
 
     async function saveSetToSupabase(reps, mode, isVerified) {
       if (!supabaseClient || !user) return;
