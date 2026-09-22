@@ -3,58 +3,83 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Pushup Tracker</title>
-  <!-- PWA Meta Tags for iOS -->
+  <title>Pushup Tracker + Camera AI</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Pushups">
+  
+  <!-- Google MediaPipe Dependencies via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+
   <style>
     :root {
       --bg: #0f172a;
       --card: #1e293b;
       --accent: #38bdf8;
-      --accent-hover: #0284c7;
       --text: #f8fafc;
       --text-muted: #94a3b8;
       --success: #22c55e;
+      --warning: #f59e0b;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; -webkit-tap-highlight-color: transparent; }
-    .container { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 20px; margin-top: 10px; }
+    .container { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 20px; }
     .card { background: var(--card); border-radius: 20px; padding: 20px; text-align: center; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); }
-    .progress-circle { position: relative; width: 160px; height: 160px; margin: 0 auto 15px; display: flex; align-items: center; justify-content: center; }
+    
+    /* Camera & Canvas Styling */
+    .camera-container { position: relative; width: 100%; height: 240px; background: #000; border-radius: 16px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    video { display: none; }
+    canvas { width: 100%; height: 100%; object-fit: cover; }
+    .status-badge { position: absolute; top: 12px; left: 12px; background: rgba(15, 23, 42, 0.8); padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; color: var(--text); }
+
+    .progress-circle { position: relative; width: 140px; height: 140px; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; }
     .progress-circle svg { width: 100%; height: 100%; transform: rotate(-90deg); }
     .progress-circle circle { fill: none; stroke-width: 12; stroke-linecap: round; }
     .bg-circle { stroke: #334155; }
     .fg-circle { stroke: var(--accent); stroke-dasharray: 440; stroke-dashoffset: 440; transition: stroke-dashoffset 0.5s ease; }
     .stat-overlay { position: absolute; display: flex; flex-direction: column; align-items: center; }
-    .stat-overlay .number { font-size: 2.5rem; font-weight: 800; color: var(--text); }
-    .stat-overlay .label { font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+    .stat-overlay .number { font-size: 2.2rem; font-weight: 800; color: var(--text); }
+    .stat-overlay .label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; }
+    
     .buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
-    button { background: var(--accent); color: #0f172a; border: none; padding: 14px; border-radius: 12px; font-weight: 700; font-size: 1.1rem; cursor: pointer; transition: transform 0.1s, background 0.2s; }
+    button { background: var(--accent); color: #0f172a; border: none; padding: 12px; border-radius: 12px; font-weight: 700; font-size: 1rem; cursor: pointer; transition: transform 0.1s; }
     button:active { transform: scale(0.96); }
     .btn-secondary { background: #334155; color: var(--text); }
-    .timer-display { font-size: 2rem; font-weight: 700; color: var(--accent); margin: 10px 0; }
-    .history-list { list-style: none; text-align: left; max-height: 180px; overflow-y: auto; margin-top: 10px; }
-    .history-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #334155; font-size: 0.95rem; }
-    .history-item:last-child { border-bottom: none; }
+    .btn-active { background: #ef4444; color: white; }
+    
+    .history-list { list-style: none; text-align: left; max-height: 140px; overflow-y: auto; margin-top: 10px; }
+    .history-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #334155; font-size: 0.9rem; }
   </style>
 </head>
 <body>
   <div class="container">
+    
+    <!-- AI Camera Card -->
+    <div class="card">
+      <div class="camera-container">
+        <video id="webcam" playsinline></video>
+        <canvas id="output_canvas" width="640" height="480"></canvas>
+        <div id="status-badge" class="status-badge">Camera Off</div>
+      </div>
+      <div style="margin-top: 12px;">
+        <button id="camera-btn" onclick="toggleCamera()" style="width: 100%;">Start AI Auto-Count Camera</button>
+      </div>
+    </div>
+
     <!-- Main Progress Card -->
     <div class="card">
       <div class="progress-circle">
         <svg>
-          <circle class="bg-circle" cx="80" cy="80" r="70"></circle>
-          <circle id="progress" class="fg-circle" cx="80" cy="80" r="70"></circle>
+          <circle class="bg-circle" cx="70" cy="70" r="60"></circle>
+          <circle id="progress" class="fg-circle" cx="70" cy="70" r="60" style="stroke-dasharray: 377; stroke-dashoffset: 377;"></circle>
         </svg>
         <div class="stat-overlay">
           <span id="current-count" class="number">0</span>
           <span class="label">/ <span id="goal-display">50</span> Reps</span>
         </div>
       </div>
-      <p style="color: var(--text-muted); font-size: 0.9rem;">Tap to log completed set</p>
+      <p style="color: var(--text-muted); font-size: 0.85rem;">Manual Quick Add</p>
       <div class="buttons">
         <button onclick="addReps(5)">+5</button>
         <button onclick="addReps(10)">+10</button>
@@ -62,45 +87,40 @@
       </div>
     </div>
 
-    <!-- Rest Timer Card -->
-    <div class="card">
-      <p style="color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase;">Rest Timer</p>
-      <div id="timer" class="timer-display">01:00</div>
-      <div class="buttons" style="grid-template-columns: 1fr 1fr;">
-        <button onclick="startTimer(60)" class="btn-secondary">Start 60s</button>
-        <button onclick="resetTimer()" class="btn-secondary">Reset</button>
-      </div>
-    </div>
-
-    <!-- History Card -->
+    <!-- Rest Timer & History Card -->
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h3 style="font-size: 1rem;">Today's Sets</h3>
+        <h3 style="font-size: 0.95rem;">Today's Sets</h3>
         <button onclick="clearData()" style="padding: 4px 8px; font-size: 0.75rem; background: #ef4444; color: white;">Reset Day</button>
       </div>
       <ul id="history" class="history-list"></ul>
     </div>
+
   </div>
 
   <script>
+    // App State
     let count = parseInt(localStorage.getItem('pushup_count') || '0');
     let goal = 50;
     let history = JSON.parse(localStorage.getItem('pushup_history') || '[]');
-    let timerInterval = null;
+    let cameraInstance = null;
+    let isCameraRunning = false;
+    let repStage = 'UP';
 
+    // UI Updates
     function updateUI() {
       document.getElementById('current-count').innerText = count;
       const circle = document.getElementById('progress');
-      const circumference = 2 * Math.PI * 70;
+      const circumference = 2 * Math.PI * 60;
       const offset = circumference - Math.min(count / goal, 1) * circumference;
       circle.style.strokeDashoffset = offset;
 
       const historyEl = document.getElementById('history');
-      historyEl.innerHTML = history.length === 0 ? '<li style="color: var(--text-muted); padding: 10px 0;">No sets logged today.</li>' : '';
+      historyEl.innerHTML = history.length === 0 ? '<li style="color: var(--text-muted); padding: 8px 0;">No sets logged today.</li>' : '';
       history.slice().reverse().forEach(item => {
         const li = document.createElement('li');
         li.className = 'history-item';
-        li.innerHTML = `<span>+${item.reps} pushups</span><span style="color: var(--text-muted);">${item.time}</span>`;
+        li.innerHTML = `<span>+${item.reps} pushup(s)</span><span style="color: var(--text-muted);">${item.time}</span>`;
         historyEl.appendChild(li);
       });
     }
@@ -112,45 +132,110 @@
       localStorage.setItem('pushup_count', count);
       localStorage.setItem('pushup_history', JSON.stringify(history));
       updateUI();
-      startTimer(60);
-    }
-
-    function startTimer(seconds) {
-      clearInterval(timerInterval);
-      let remaining = seconds;
-      const timerEl = document.getElementById('timer');
-      
-      const render = () => {
-        const m = String(Math.floor(remaining / 60)).padStart(2, '0');
-        const s = String(remaining % 60).padStart(2, '0');
-        timerEl.innerText = `${m}:${s}`;
-      };
-
-      render();
-      timerInterval = setInterval(() => {
-        remaining--;
-        if (remaining <= 0) {
-          clearInterval(timerInterval);
-          timerEl.innerText = "00:00";
-          if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-        } else {
-          render();
-        }
-      }, 1000);
-    }
-
-    function resetTimer() {
-      clearInterval(timerInterval);
-      document.getElementById('timer').innerText = "01:00";
     }
 
     function clearData() {
       if (confirm("Reset today's pushup count?")) {
-        count = 0;
-        history = [];
+        count = 0; history = [];
         localStorage.removeItem('pushup_count');
         localStorage.removeItem('pushup_history');
         updateUI();
+      }
+    }
+
+    // Trigonometry: Calculate Elbow Angle (Degrees)
+    function calculateAngle(a, b, c) {
+      const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
+      let angle = Math.abs((radians * 180.0) / Math.PI);
+      return angle > 180.0 ? 360.0 - angle : angle;
+    }
+
+    // MediaPipe Pose Tracking Loop
+    const videoElement = document.getElementById('webcam');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const statusBadge = document.getElementById('status-badge');
+
+    const pose = new Pose({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    });
+
+    pose.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    pose.onResults((results) => {
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.poseLandmarks) {
+        const lm = results.poseLandmarks;
+        // Select arm side with best visibility (Left: 11,13,15 | Right: 12,14,16)
+        const leftVis = (lm[11].visibility + lm[13].visibility + lm[15].visibility) / 3;
+        const rightVis = (lm[12].visibility + lm[14].visibility + lm[16].visibility) / 3;
+
+        const [shoulder, elbow, wrist] = leftVis > rightVis ? [lm[11], lm[13], lm[15]] : [lm[12], lm[14], lm[16]];
+
+        if (shoulder.visibility > 0.5 && elbow.visibility > 0.5 && wrist.visibility > 0.5) {
+          const angle = Math.round(calculateAngle(shoulder, elbow, wrist));
+
+          // Visual Skeleton Overlay
+          [shoulder, elbow, wrist].forEach(pt => {
+            canvasCtx.beginPath();
+            canvasCtx.arc(pt.x * canvasElement.width, pt.y * canvasElement.height, 6, 0, 2 * Math.PI);
+            canvasCtx.fillStyle = '#22c55e';
+            canvasCtx.fill();
+          });
+
+          // Draw Angle Text
+          canvasCtx.fillStyle = '#38bdf8';
+          canvasCtx.font = 'bold 24px sans-serif';
+          canvasCtx.fillText(`${angle}°`, elbow.x * canvasElement.width + 15, elbow.y * canvasElement.height);
+
+          // Rep Detection Logic
+          if (angle < 90 && repStage === 'UP') {
+            repStage = 'DOWN';
+            statusBadge.innerText = 'Position: DOWN';
+            statusBadge.style.color = '#f59e0b';
+          }
+          if (angle > 155 && repStage === 'DOWN') {
+            repStage = 'UP';
+            statusBadge.innerText = 'Position: UP (Rep Logged!)';
+            statusBadge.style.color = '#22c55e';
+            addReps(1);
+            if (navigator.vibrate) navigator.vibrate(100);
+          }
+        }
+      }
+      canvasCtx.restore();
+    });
+
+    // Toggle Camera Start/Stop
+    function toggleCamera() {
+      const btn = document.getElementById('camera-btn');
+      if (!isCameraRunning) {
+        cameraInstance = new Camera(videoElement, {
+          onFrame: async () => { await pose.send({ image: videoElement }); },
+          width: 640,
+          height: 480
+        });
+        cameraInstance.start();
+        isCameraRunning = true;
+        btn.innerText = 'Stop Camera';
+        btn.classList.add('btn-active');
+        statusBadge.innerText = 'Position: Ready';
+      } else {
+        if (cameraInstance) cameraInstance.stop();
+        isCameraRunning = false;
+        btn.innerText = 'Start AI Auto-Count Camera';
+        btn.classList.remove('btn-active');
+        statusBadge.innerText = 'Camera Off';
+        statusBadge.style.color = 'var(--text)';
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
       }
     }
 
