@@ -316,10 +316,9 @@
           <div id="timer-hud" class="hud-badge">00:00</div>
         </div>
       </div>
-      <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
-        <button id="camera-btn" onclick="toggleCamera()" style="flex: 2;">Start Camera</button>
-        <button onclick="addManualRep()" class="btn-secondary" style="flex: 1;">+1 Manual</button>
-        <button onclick="finishWorkoutSet()" style="flex: 100%; background: #ffffff; color: #000000; margin-top: 4px;">Finish & Save Set</button>
+      <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+        <button id="camera-btn" onclick="toggleCamera()">Start Camera</button>
+        <button onclick="finishWorkoutSet()" style="background: #ffffff; color: #000000;">Finish & Save Set</button>
       </div>
     </div>
 
@@ -356,7 +355,7 @@
   <script>
     // --- PASTE YOUR SUPABASE KEYS HERE ---
     const SUPABASE_URL = "https://vflqdmwdynpsxagmrpmw.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_cbQNTilH9HH...";
+    const SUPABASE_ANON_KEY = "sb_publishable_cbQNTilH9HHJKBPIOjLiwQ_zUKLM-Pa";
 
     // --- GLOBAL VARIABLES ---
     let supabaseClient = null;
@@ -491,10 +490,6 @@
       if (isVerified && navigator.vibrate) navigator.vibrate(80);
     }
 
-    window.addManualRep = function() {
-      recordRep(false);
-    };
-
     window.finishWorkoutSet = async function() {
       if (currentReps <= 0) {
         alert("Do at least 1 rep before saving!");
@@ -587,7 +582,7 @@
       document.getElementById('feed-count').innerText = current + 1;
     }
 
-    // --- CAMERA pose DETECTION ---
+    // --- CAMERA POSE DETECTION ---
     window.toggleCamera = function() {
       const btn = document.getElementById('camera-btn');
       const statusHud = document.getElementById('status-hud');
