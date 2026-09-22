@@ -18,8 +18,8 @@
       --text: #f8fafc; --text-muted: #94a3b8; --success: #22c55e;
       --warning: #f59e0b; --danger: #ef4444;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 15px; padding-bottom: 80px; -webkit-tap-highlight-color: transparent; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: manipulation; }
+    body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 15px; padding-bottom: 90px; -webkit-tap-highlight-color: transparent; }
     .container { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 16px; }
     .card { background: var(--card); border-radius: 20px; padding: 18px; text-align: center; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); position: relative; }
     
@@ -38,7 +38,7 @@
     .camera-container { position: relative; width: 100%; height: 220px; background: #000; border-radius: 16px; overflow: hidden; }
     video { display: none; }
     canvas { width: 100%; height: 100%; object-fit: cover; }
-    .hud-overlay { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; pointer-events: none; }
+    .hud-overlay { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; pointer-events: none; z-index: 10; }
     .hud-badge { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px); padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
 
     /* Rep Display */
@@ -59,12 +59,12 @@
     /* Realtime Drawer */
     .drawer { position: fixed; bottom: 0; left: 0; right: 0; background: #1e293b; border-top-left-radius: 20px; border-top-right-radius: 20px; box-shadow: 0 -5px 25px rgba(0,0,0,0.5); transform: translateY(calc(100% - 45px)); transition: transform 0.3s ease; max-width: 440px; margin: 0 auto; z-index: 100; }
     .drawer.open { transform: translateY(0); }
-    .drawer-handle { height: 45px; display: flex; justify-content: center; align-items: center; cursor: pointer; font-weight: 700; font-size: 0.85rem; color: var(--accent); }
+    .drawer-handle { height: 45px; width: 100%; display: flex; justify-content: center; align-items: center; cursor: pointer; font-weight: 700; font-size: 0.85rem; color: var(--accent); background: transparent; border: none; }
     .drawer-content { padding: 0 16px 20px; max-height: 220px; overflow-y: auto; }
 
     /* Buttons */
-    button { background: var(--accent); color: #0f172a; border: none; padding: 12px; border-radius: 12px; font-weight: 700; font-size: 0.95rem; cursor: pointer; transition: transform 0.1s; }
-    button:active { transform: scale(0.96); }
+    button { background: var(--accent); color: #0f172a; border: none; padding: 12px; border-radius: 12px; font-weight: 700; font-size: 0.95rem; cursor: pointer; -webkit-appearance: none; }
+    button:active { transform: scale(0.96); opacity: 0.9; }
     .btn-secondary { background: #334155; color: var(--text); }
   </style>
 </head>
@@ -98,10 +98,10 @@
           <div id="timer-hud" class="hud-badge" style="color: var(--accent);">00:00</div>
         </div>
       </div>
-    <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
-         <button id="camera-btn" onclick="toggleCamera()" style="flex: 2;">Start AI Camera</button>
-         <button onclick="addManualRep()" class="btn-secondary" style="flex: 1;">+1 Manual</button>
-         <button onclick="finishWorkoutSet()" style="flex: 100%; background: #22c55e; color: #0f172a; margin-top: 4px;">Finish & Save Set</button>
+      <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
+        <button id="camera-btn" onclick="toggleCamera()" style="flex: 2;">Start AI Camera</button>
+        <button onclick="addManualRep()" class="btn-secondary" style="flex: 1;">+1 Manual</button>
+        <button onclick="finishWorkoutSet()" style="flex: 100%; background: #22c55e; color: #0f172a; margin-top: 4px;">Finish & Save Set</button>
       </div>
     </div>
 
@@ -128,7 +128,7 @@
 
   <!-- Real-Time Activity Drawer -->
   <div id="drawer" class="drawer">
-    <div class="drawer-handle" onclick="toggleDrawer()">Live Activity Feed (<span id="feed-count">0</span>)</div>
+    <button class="drawer-handle" onclick="toggleDrawer()">Live Activity Feed (<span id="feed-count">0</span>)</button>
     <div class="drawer-content">
       <ul id="live-feed" class="lb-list">
         <li style="color: var(--text-muted); font-size: 0.8rem;">Listening for live sets...</li>
@@ -137,34 +137,36 @@
   </div>
 
   <script>
-    // --- PASTE YOUR SUPABASE KEYS HERE ---
+    // --- SUPABASE SETUP ---
     const SUPABASE_URL = "https://vflqdmwdynpsxagmrpmw.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_cbQNTilH9HHJKBPIOjLiwQ_zUKLM-Pa";
+    const SUPABASE_ANON_KEY = "sb_publishable_cbQNTilH9HH...";
 
     let supabaseClient = null;
     if (SUPABASE_URL !== "YOUR_SUPABASE_URL" && window.supabase) {
       supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     }
 
-    // --- WEB AUDIO API (SYNTHESIZER) ---
+    // --- AUDIO SYNTHESIZER ---
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     function playBeep(freq, type = 'sine', duration = 0.08) {
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = type;
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + duration);
+      try {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) { console.warn("Audio Context blocked by browser"); }
     }
-    const playDownBeep = () => playBeep(350, 'sine', 0.08);   // Low tone on DOWN position
-    const playUpBeep = () => playBeep(750, 'triangle', 0.12); // High chime on completed rep
+    const playDownBeep = () => playBeep(350, 'sine', 0.08);
+    const playUpBeep = () => playBeep(750, 'triangle', 0.12);
 
-    // --- APP STATE ---
+    // --- APP STATE & ANTI-CHEAT VARIABLES ---
     let currentMode = 'standard';
     let currentReps = 0;
     let repStage = 'UP';
@@ -172,14 +174,12 @@
     let timerInterval = null;
     let modeTimerSeconds = 0;
     let user = null;
-
     let lastRepTime = 0;
-    let downPhaseStartTime = 0
+    let downPhaseStartTime = 0;
 
     // --- INITIALIZATION ---
     window.addEventListener('DOMContentLoaded', async () => {
       if (supabaseClient) {
-        // Check OAuth Session
         const { data: { session } } = await supabaseClient.auth.getSession();
         if (session && session.user) {
           user = session.user;
@@ -196,13 +196,13 @@
         loadLeaderboard('champions');
         loadLiveFeed();
       } else {
-        document.getElementById('lb-list').innerHTML = '<li style="color: var(--text-muted); font-size: 0.85rem;">Paste SUPABASE_URL & SUPABASE_ANON_KEY in index.html to enable leaderboards.</li>';
+        document.getElementById('lb-list').innerHTML = '<li style="color: var(--text-muted); font-size: 0.85rem;">Connecting database...</li>';
       }
     });
 
     function updateUserUI() {
       if (!user) return;
-      const name = user.user_metadata.preferred_username || user.user_metadata.full_name || 'Athlete';
+      const name = user.user_metadata.user_name || user.user_metadata.preferred_username || user.user_metadata.full_name || 'Athlete';
       const avatar = user.user_metadata.avatar_url || 'https://via.placeholder.com/32';
       document.getElementById('user-name').innerText = name;
       document.getElementById('user-avatar').src = avatar;
@@ -213,7 +213,7 @@
     function setMode(mode, e) {
       currentMode = mode;
       document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-      if (e) e.target.classList.add('active');
+      if (e && e.target) e.target.classList.add('active');
       resetWorkout();
 
       const descMap = {
@@ -271,11 +271,17 @@
     }
 
     async function finishWorkoutSet() {
-      alert(`Set Complete! Total Reps: ${currentReps}`);
-      if (supabaseClient && user) {
-        await saveSetToSupabase(currentReps, currentMode, true);
-        loadLeaderboard('champions');
+      if (currentReps <= 0) {
+        alert("Do at least 1 rep before saving!");
+        return;
       }
+      if (!user) {
+        alert("Please click 'Login GitHub' at the top before saving your set!");
+        return;
+      }
+
+      await saveSetToSupabase(currentReps, currentMode, true);
+      loadLeaderboard('champions');
       resetWorkout();
     }
 
@@ -283,8 +289,6 @@
     async function loadLeaderboard(type) {
       const lbEl = document.getElementById('lb-list');
       if (!supabaseClient) return;
-
-      lbEl.innerHTML = '<li style="color: var(--text-muted); font-size: 0.85rem;">Loading rankings...</li>';
 
       try {
         let { data, error } = await supabaseClient.from('workout_sets').select('username, reps, is_verified, mode');
@@ -325,14 +329,16 @@
 
     async function loadLiveFeed() {
       if (!supabaseClient) return;
-      const { data } = await supabaseClient.from('workout_sets').select('*').order('created_at', { ascending: false }).limit(10);
-      if (data) renderFeedItems(data);
+      try {
+        const { data } = await supabaseClient.from('workout_sets').select('*').order('created_at', { ascending: false }).limit(10);
+        if (data) renderFeedItems(data);
 
-      supabaseClient.channel('public:workout_sets')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'workout_sets' }, payload => {
-          prependFeedItem(payload.new);
-        })
-        .subscribe();
+        supabaseClient.channel('public:workout_sets')
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'workout_sets' }, payload => {
+            prependFeedItem(payload.new);
+          })
+          .subscribe();
+      } catch(e) { console.warn("Live feed subscription error", e); }
     }
 
     function renderFeedItems(items) {
@@ -356,67 +362,71 @@
       document.getElementById('feed-count').innerText = current + 1;
     }
 
-    // --- MEDIAPIPE POSE TRACKING ---
+    // --- MEDIAPIPE AI CAMERA (MOBILE SAFE) ---
     const videoElement = document.getElementById('webcam');
     const canvasElement = document.getElementById('output_canvas');
     const canvasCtx = canvasElement.getContext('2d');
     const statusHud = document.getElementById('status-hud');
 
-    const pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-    pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5 });
+    let pose = null;
+    if (window.Pose) {
+      pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+      pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5 });
 
-    pose.onResults((results) => {
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+      pose.onResults((results) => {
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-      if (results.poseLandmarks) {
-        const lm = results.poseLandmarks;
-        const leftVis = (lm[11].visibility + lm[13].visibility + lm[15].visibility) / 3;
-        const rightVis = (lm[12].visibility + lm[14].visibility + lm[16].visibility) / 3;
-        const [shoulder, elbow, wrist] = leftVis > rightVis ? [lm[11], lm[13], lm[15]] : [lm[12], lm[14], lm[16]];
+        if (results.poseLandmarks) {
+          const lm = results.poseLandmarks;
+          const leftVis = (lm[11].visibility + lm[13].visibility + lm[15].visibility) / 3;
+          const rightVis = (lm[12].visibility + lm[14].visibility + lm[16].visibility) / 3;
+          const [shoulder, elbow, wrist] = leftVis > rightVis ? [lm[11], lm[13], lm[15]] : [lm[12], lm[14], lm[16]];
 
-        if (shoulder.visibility > 0.5 && elbow.visibility > 0.5 && wrist.visibility > 0.5) {
-          const radians = Math.atan2(wrist.y - elbow.y, wrist.x - elbow.x) - Math.atan2(shoulder.y - elbow.y, shoulder.x - elbow.x);
-          let angle = Math.abs((radians * 180.0) / Math.PI);
-          angle = angle > 180.0 ? 360.0 - angle : Math.round(angle);
+          if (shoulder.visibility > 0.5 && elbow.visibility > 0.5 && wrist.visibility > 0.5) {
+            const radians = Math.atan2(wrist.y - elbow.y, wrist.x - elbow.x) - Math.atan2(shoulder.y - elbow.y, shoulder.x - elbow.x);
+            let angle = Math.abs((radians * 180.0) / Math.PI);
+            angle = angle > 180.0 ? 360.0 - angle : Math.round(angle);
 
-          [shoulder, elbow, wrist].forEach(pt => {
-            canvasCtx.beginPath();
-            canvasCtx.arc(pt.x * canvasElement.width, pt.y * canvasElement.height, 5, 0, 2 * Math.PI);
-            canvasCtx.fillStyle = '#22c55e'; canvasCtx.fill();
-          });
+            [shoulder, elbow, wrist].forEach(pt => {
+              canvasCtx.beginPath();
+              canvasCtx.arc(pt.x * canvasElement.width, pt.y * canvasElement.height, 5, 0, 2 * Math.PI);
+              canvasCtx.fillStyle = '#22c55e'; canvasCtx.fill();
+            });
 
-// NEW ANTI-CHEAT CODE:
-if (angle < 90 && repStage === 'UP') {
-  repStage = 'DOWN';
-  downPhaseStartTime = Date.now(); // Track when down position starts
-  playDownBeep();
-  statusHud.innerText = 'Position: DOWN';
-  statusHud.style.color = '#f59e0b';
-}
+            // Anti-Cheat Cadence Detection
+            if (angle < 90 && repStage === 'UP') {
+              repStage = 'DOWN';
+              downPhaseStartTime = Date.now();
+              playDownBeep();
+              statusHud.innerText = 'Position: DOWN';
+              statusHud.style.color = '#f59e0b';
+            }
 
-if (angle > 155 && repStage === 'DOWN') {
-  const now = Date.now();
-  const timeInDownPhase = now - downPhaseStartTime;
-  const timeSinceLastRep = now - lastRepTime;
+            if (angle > 155 && repStage === 'DOWN') {
+              const now = Date.now();
+              const timeInDownPhase = now - downPhaseStartTime;
+              const timeSinceLastRep = now - lastRepTime;
 
-  // Must hold bottom >= 120ms and full rep must take >= 750ms
-  if (timeInDownPhase >= 120 && timeSinceLastRep >= 750) {
-    repStage = 'UP';
-    lastRepTime = now;
-    statusHud.innerText = 'Position: UP';
-    statusHud.style.color = '#22c55e';
-    recordRep(true);
-  } else {
-    console.warn("Rep rejected: speed too fast or tracking glitch");
-  }
-}
-      }
-      canvasCtx.restore();
-    });
+              if (timeInDownPhase >= 120 && timeSinceLastRep >= 750) {
+                repStage = 'UP';
+                lastRepTime = now;
+                statusHud.innerText = 'Position: UP';
+                statusHud.style.color = '#22c55e';
+                recordRep(true);
+              } else {
+                console.warn("Rep rejected: cadence too fast / flickering points");
+              }
+            }
+          }
+        }
+        canvasCtx.restore();
+      });
+    }
 
     function toggleCamera() {
+      if (!pose) return alert("Camera AI script is still loading or blocked by your mobile browser settings.");
       const btn = document.getElementById('camera-btn');
       if (!isCameraRunning) {
         const cam = new Camera(videoElement, { onFrame: async () => { await pose.send({ image: videoElement }); }, width: 640, height: 480 });
@@ -431,55 +441,39 @@ if (angle > 155 && repStage === 'DOWN') {
 
     // --- AUTH & DATABASE ACTIONS ---
     async function toggleAuth() {
-  if (!supabaseClient) return alert("Paste your Supabase URL and Key into index.html!");
-  if (user) {
-    await supabaseClient.auth.signOut();
-    location.reload();
-  } else {
-    await supabaseClient.auth.signInWithOAuth({
-      provider: 'github',
-      options: {
-        redirectTo: window.location.origin + window.location.pathname
+      if (!supabaseClient) return alert("Supabase client not connected!");
+      if (user) {
+        await supabaseClient.auth.signOut();
+        location.reload();
+      } else {
+        await supabaseClient.auth.signInWithOAuth({
+          provider: 'github',
+          options: {
+            redirectTo: window.location.origin + window.location.pathname
+          }
+        });
       }
-    });
-  }
-}
+    }
 
-async function saveSetToSupabase(reps, mode, isVerified) {
-  if (!supabaseClient) {
-    alert("Supabase client is not connected.");
-    return;
-  }
-  if (!user) {
-    alert("Please click 'Login GitHub' at the top before saving your set!");
-    return;
-  }
-  if (reps <= 0) {
-    alert("Do at least 1 rep before saving!");
-    return;
-  }
+    async function saveSetToSupabase(reps, mode, isVerified) {
+      if (!supabaseClient || !user) return;
+      const username = user.user_metadata.user_name || user.user_metadata.preferred_username || user.user_metadata.full_name || 'Athlete';
 
-  // Fallback chain for username to prevent NULL database errors
-  const username = user.user_metadata.user_name || 
-                   user.user_metadata.preferred_username || 
-                   user.user_metadata.full_name || 
-                   'Athlete';
+      const { error } = await supabaseClient.from('workout_sets').insert({
+        user_id: user.id,
+        username: username,
+        reps: reps,
+        mode: mode,
+        is_verified: isVerified
+      });
 
-  const { data, error } = await supabaseClient.from('workout_sets').insert({
-    user_id: user.id,
-    username: username,
-    reps: reps,
-    mode: mode,
-    is_verified: isVerified
-  });
-
-  if (error) {
-    console.error("Supabase Save Error:", error);
-    alert("Database Error: " + error.message);
-  } else {
-    alert(`Successfully saved ${reps} reps!`);
-  }
-}
+      if (error) {
+        console.error("Save error:", error);
+        alert("Database Error: " + error.message);
+      } else {
+        alert(`Successfully saved ${reps} reps!`);
+      }
+    }
 
     function toggleDrawer() {
       document.getElementById('drawer').classList.toggle('open');
@@ -487,7 +481,7 @@ async function saveSetToSupabase(reps, mode, isVerified) {
 
     function switchTab(tab, e) {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      if (e) e.target.classList.add('active');
+      if (e && e.target) e.target.classList.add('active');
       loadLeaderboard(tab);
     }
   </script>
